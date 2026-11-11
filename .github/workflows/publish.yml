@@ -1,0 +1,49 @@
+# Publish to production
+# Copies the reviewed staging site into this repo, switches it to production
+# values, checks for staging leftovers and commits to main.
+# Run it from: GitHub › taniarae-site › Actions › "Publish to production" › Run workflow.
+name: Publish to production
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: publish-production
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out production (this repo)
+        uses: actions/checkout@v4
+        with:
+          path: production
+
+      - name: Check out staging
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/taniarae-site-staging
+          ref: main
+          path: staging
+
+      - name: Copy site and apply production values
+        run: python3 staging/scripts/make-production.py staging production
+
+      - name: Commit to main
+        working-directory: production
+        run: |
+          STAGING_SHA=$(git -C ../staging rev-parse --short HEAD)
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "Production is already up to date with staging ($STAGING_SHA)."
+          else
+            git commit -m "chore: publish staging $STAGING_SHA to production"
+            git push origin HEAD:main
+            echo "Published staging $STAGING_SHA. GitHub Pages will update in a minute or two."
+          fi
